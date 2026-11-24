@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ClipboardList, CheckCircle, XCircle, Clock, Eye } from 'lucide-react';
-import { getUserClaims, getReceivedClaims, updateClaim, updateItem, createNotification, getItem } from '../firebase/firestoreService';
+import { getUserClaims, getReceivedClaims, updateClaim, updateItem, createNotification } from '../firebase/firestoreService';
 import { useAuth } from '../context/AuthContext';
 import StatusBadge from '../components/StatusBadge';
 import EmptyState from '../components/EmptyState';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { formatDate, formatRelativeTime } from '../utils/formatters';
+import { formatRelativeTime } from '../utils/formatters';
 import toast from 'react-hot-toast';
 
 const TABS = [
@@ -31,7 +31,8 @@ const Claims = () => {
       ]);
       setSubmittedClaims(submitted);
       setReceivedClaims(received);
-    } catch {
+    } catch (err) {
+      console.error('Claims load error:', err);
       toast.error('Failed to load claims.');
     } finally {
       setLoading(false);
@@ -45,26 +46,38 @@ const Claims = () => {
     try {
       await updateClaim(claim.id, { status: newStatus });
 
-      // If accepted, mark item as claimed
       if (newStatus === 'accepted') {
+        // Mark item as claimed
         await updateItem(claim.itemId, { status: 'claimed' });
-        // Notify claimant
+        // ✅ FIX: Notify claimant with itemId so they can link to the item
         await createNotification(claim.claimantId, {
-          title: 'Claim Accepted!',
-          message: `Your claim has been accepted. Please coordinate with the reporter to retrieve your item.`,
+          title: '🎉 Claim Accepted!',
+          message: `Your claim for "${claim.itemTitle || 'an item'}" has been accepted. Please coordinate with the reporter to retrieve your item.`,
           type: 'claim',
+          itemId: claim.itemId,
+          reportId: claim.itemId,
+          itemTitle: claim.itemTitle,
+          senderName: userProfile?.name,
+          senderId: currentUser.uid,
         });
       } else if (newStatus === 'rejected') {
+        // ✅ FIX: Notify claimant of rejection with itemId
         await createNotification(claim.claimantId, {
-          title: 'Claim Rejected',
-          message: `Your claim was not verified. If you believe this is your item, contact campus admin.`,
+          title: 'Claim Not Verified',
+          message: `Your claim for "${claim.itemTitle || 'an item'}" was not approved. If you believe this is your item, please contact campus administration.`,
           type: 'claim',
+          itemId: claim.itemId,
+          reportId: claim.itemId,
+          itemTitle: claim.itemTitle,
+          senderName: userProfile?.name,
+          senderId: currentUser.uid,
         });
       }
 
       setReceivedClaims(prev => prev.map(c => c.id === claim.id ? { ...c, status: newStatus } : c));
-      toast.success(`Claim ${newStatus}!`);
-    } catch {
+      toast.success(`Claim ${newStatus === 'accepted' ? 'accepted' : 'rejected'}!`);
+    } catch (err) {
+      console.error('Claim action error:', err);
       toast.error('Failed to update claim status.');
     } finally {
       setActionLoading(null);
@@ -116,14 +129,24 @@ const Claims = () => {
             <div key={claim.id} className="card p-5">
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                 <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
                     <StatusBadge status={claim.status} />
                     <span className="text-xs text-gray-400">{formatRelativeTime(claim.createdAt)}</span>
                   </div>
 
                   <p className="text-sm font-medium text-gray-900 mb-1">
-                    Item ID: <Link to={`/item/${claim.itemId}`} className="text-blue-600 hover:underline">{claim.itemId}</Link>
+                    Item:{' '}
+                    <Link to={`/item/${claim.itemId}`} className="text-blue-600 hover:underline">
+                      {claim.itemTitle || claim.itemId}
+                    </Link>
                   </p>
+
+                  {/* Show claimant name for received claims */}
+                  {tab === 'received' && claim.claimantName && (
+                    <p className="text-xs text-gray-500 mb-2">
+                      Submitted by: <span className="font-medium">{claim.claimantName}</span>
+                    </p>
+                  )}
 
                   <div className="mt-3 p-3 bg-gray-50 rounded-lg">
                     <p className="text-xs text-gray-400 mb-1">Claim Message:</p>
@@ -136,7 +159,7 @@ const Claims = () => {
                     <Eye className="w-3.5 h-3.5" /> View Item
                   </Link>
 
-                  {/* Received tab actions */}
+                  {/* Received tab: Accept / Reject for pending claims */}
                   {tab === 'received' && claim.status === 'pending' && (
                     <>
                       <button

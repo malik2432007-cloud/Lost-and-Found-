@@ -20,13 +20,20 @@ export const validateRegisterForm = ({ name, email, password, confirmPassword })
   return errors;
 };
 
-export const validateItemForm = (data) => {
+/**
+ * Validate item form data.
+ * @param {Object} data Form values
+ * @param {boolean} isLocationRequired Set to true only if location is strictly required
+ */
+export const validateItemForm = (data, isLocationRequired = false) => {
   const errors = {};
   if (!data.title || data.title.trim().length < 2) errors.title = 'Item name must be at least 2 characters.';
   if (!data.category) errors.category = 'Please select a category.';
   if (!data.description || data.description.trim().length < 10) errors.description = 'Description must be at least 10 characters.';
   if (data.description && data.description.length > MAX_DESCRIPTION_LENGTH) errors.description = `Description cannot exceed ${MAX_DESCRIPTION_LENGTH} characters.`;
-  if (!data.location) errors.location = 'Please select a location.';
+  if (isLocationRequired && (!data.location || !data.location.trim())) {
+    errors.location = 'Please select a location.';
+  }
   if (!data.date) errors.date = 'Please provide the date.';
   const today = new Date();
   today.setHours(23, 59, 59, 999);
@@ -35,7 +42,9 @@ export const validateItemForm = (data) => {
 };
 
 export const validateImageFile = (file) => {
-  if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+  if (!file) return null;
+  const isImage = file.type?.startsWith('image/') || /\.(jpe?g|png|webp|gif)$/i.test(file.name);
+  if (!isImage) {
     return 'Only JPG, PNG, WebP, or GIF images are allowed.';
   }
   if (file.size > MAX_IMAGE_SIZE_MB * 1024 * 1024) {

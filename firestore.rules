@@ -1,0 +1,118 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helper functions ─────────────────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == 'admin';
+    }
+
+    // ─── Users collection ─────────────────────────────────────────────────────
+    match /users/{userId} {
+      // Any signed-in user can read user profiles (needed for name lookups)
+      allow read: if isSignedIn();
+
+      // A user can only create their own profile document
+      allow create: if isOwner(userId)
+        && request.resource.data.role == 'user'    // Cannot self-assign admin
+        && request.resource.data.uid == userId;    // UID must match doc ID
+
+      // A user can update their own profile; they cannot change their own role
+      allow update: if (
+          isOwner(userId)
+          && (!request.resource.data.keys().hasAny(['role'])
+              || request.resource.data.role == resource.data.role)  // role unchanged
+        )
+        || isAdmin();  // Admin can update any profile including role
+
+      // Only admin can delete profiles
+      allow delete: if isAdmin();
+    }
+
+    // ─── Items collection ─────────────────────────────────────────────────────
+    match /items/{itemId} {
+      // Anyone (including unauthenticated) can read items — public browse
+      allow read: if true;
+
+      // Only authenticated users can create items
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid;
+
+      // Owner or admin can update; owner cannot change userId (ownership)
+      allow update: if (
+          isSignedIn()
+          && (resource.data.userId == request.auth.uid || resource.data.get('ownerId', '') == request.auth.uid)
+          && (!request.resource.data.keys().hasAny(['userId'])
+              || request.resource.data.userId == resource.data.userId)
+        )
+        || isAdmin();
+
+      // Owner or admin can delete
+      allow delete: if (isSignedIn() && (resource.data.userId == request.auth.uid || resource.data.get('ownerId', '') == request.auth.uid)) || isAdmin();
+    }
+
+    // ─── Claims collection ────────────────────────────────────────────────────
+    match /claims/{claimId} {
+      // Claimant or item owner can read a claim; admin can read all
+      allow read: if isSignedIn() && (
+        resource.data.claimantId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
+        isAdmin()
+      );
+
+      // Any authenticated user can create a claim for someone else's item
+      allow create: if isSignedIn()
+        && request.resource.data.claimantId == request.auth.uid
+        && request.resource.data.ownerId != request.auth.uid;  // Cannot claim own item
+
+      // Only the item owner (ownerId) or admin can update claim status
+      allow update: if isSignedIn() && (
+        resource.data.ownerId == request.auth.uid || isAdmin()
+      );
+
+      // Only admin can delete claims
+      allow delete: if isAdmin();
+    }
+
+    // ─── Notifications collection ─────────────────────────────────────────────
+    match /notifications/{notifId} {
+      // Users can only read their own notifications (supports userId or recipientId)
+      allow read: if isSignedIn() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.get('recipientId', '') == request.auth.uid
+      );
+
+      // Any authenticated user can create notifications (for claims, updates)
+      allow create: if isSignedIn();
+
+      // A user can update their own notifications (mark as read)
+      allow update: if isSignedIn() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.get('recipientId', '') == request.auth.uid
+      );
+
+      // Admin or recipient can delete
+      allow delete: if isSignedIn() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.get('recipientId', '') == request.auth.uid ||
+        isAdmin()
+      );
+    }
+
+    // ─── Default deny ─────────────────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

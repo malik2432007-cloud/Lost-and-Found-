@@ -4,7 +4,7 @@ import Sidebar from './Sidebar';
 
 const DashboardLayout = () => (
   <div className="min-h-screen bg-gray-50">
-    <Navbar />
+    <Navbar hideNavLinks />
     <div className="flex">
       <Sidebar />
       <main className="flex-1 p-6 max-w-5xl">

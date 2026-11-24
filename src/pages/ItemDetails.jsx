@@ -5,12 +5,12 @@ import {
   User, MessageSquare, CheckCircle, AlertCircle, Loader
 } from 'lucide-react';
 import { getItem, createClaim, getItemClaims, createNotification } from '../firebase/firestoreService';
-import { uploadItemImage } from '../firebase/storageService';
 import { useAuth } from '../context/AuthContext';
 import { findPotentialMatches } from '../services/matchingService';
 import { getAllItems } from '../firebase/firestoreService';
 import StatusBadge from '../components/StatusBadge';
 import ItemCard from '../components/ItemCard';
+import ItemImage from '../components/ItemImage';
 import Modal from '../components/Modal';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { formatDate, formatRelativeTime } from '../utils/formatters';
@@ -19,6 +19,7 @@ import toast from 'react-hot-toast';
 
 const PLACEHOLDER = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22800%22 height=%22500%22 viewBox=%220 0 800 500%22%3E%3Crect width=%22800%22 height=%22500%22 fill=%22%23f3f4f6%22/%3E%3Ctext x=%22400%22 y=%22260%22 font-family=%22sans-serif%22 font-size=%2224%22 fill=%22%239ca3af%22 text-anchor=%22middle%22%3ENo Image Available%3C/text%3E%3C/svg%3E';
 
+// ✅ FIX: DetailRow defined outside component to prevent remounting
 const DetailRow = ({ icon: Icon, label, value }) => (
   value ? (
     <div className="flex items-start gap-3 py-3 border-b border-gray-50 last:border-0">
@@ -64,6 +65,7 @@ const ItemDetails = () => {
           setExistingClaim(mine || null);
         }
       } catch (e) {
+        console.error('ItemDetails load error:', e);
         toast.error('Failed to load item details.');
       } finally {
         setLoading(false);
@@ -75,26 +77,43 @@ const ItemDetails = () => {
   const handleClaim = async () => {
     const err = validateClaimForm(claimMsg);
     if (err) { setClaimError(err); return; }
+    const ownerId = item.userId || item.ownerId || item.uid;
+    if (!ownerId) {
+      toast.error('Cannot identify item owner. Please try again.');
+      return;
+    }
     setClaimLoading(true);
     try {
       await createClaim({
         itemId: id,
+        itemTitle: item.title,
         claimantId: currentUser.uid,
-        ownerId: item.userId,
+        claimantName: userProfile?.name || 'Someone',
+        ownerId: ownerId,
         message: claimMsg.trim(),
       });
-      // Notify the item owner
-      if (item.userId !== currentUser.uid) {
-        await createNotification(item.userId, {
+
+      // ✅ Notify the item owner with itemId & itemTitle for linking
+      // Guard: don't notify yourself
+      if (ownerId && ownerId !== currentUser.uid) {
+        await createNotification(ownerId, {
           title: 'New Claim on Your Item',
-          message: `${userProfile?.name || 'Someone'} has submitted a claim on your item: "${item.title}".`,
+          message: `${userProfile?.name || 'Someone'} has submitted a claim on your item: "${item.title}". Review it in your Claims section.`,
           type: 'claim',
+          itemId: id,
+          reportId: id,
+          itemTitle: item.title,
+          senderName: userProfile?.name || 'A user',
+          senderId: currentUser.uid,
         });
       }
-      toast.success('Claim submitted successfully!');
+
+      toast.success('Claim submitted successfully! The reporter has been notified.');
       setClaimModal(false);
+      setClaimMsg('');
       setExistingClaim({ status: 'pending' });
-    } catch {
+    } catch (err) {
+      console.error('Claim submit error:', err);
       toast.error('Failed to submit claim. Please try again.');
     } finally {
       setClaimLoading(false);
@@ -104,7 +123,7 @@ const ItemDetails = () => {
   if (loading) return <LoadingSpinner fullPage text="Loading item details..." />;
   if (!item) return null;
 
-  const isOwner = currentUser?.uid === item.userId;
+  const isOwner = currentUser?.uid === (item.userId || item.ownerId || item.uid);
   const canClaim = currentUser && !isOwner && item.status === 'active';
 
   return (
@@ -117,12 +136,13 @@ const ItemDetails = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Image + Quick Info */}
         <div className="lg:col-span-1 space-y-4">
-          <div className="card overflow-hidden">
-            <img
-              src={item.imageUrl || PLACEHOLDER}
+          <div className="card overflow-hidden bg-gray-50 border border-gray-100 shadow-sm">
+            <ItemImage
+              src={item.imageUrl || item.image}
               alt={item.title}
-              className="w-full h-64 object-cover"
-              onError={e => { e.target.src = PLACEHOLDER; }}
+              className="w-full h-72 sm:h-80"
+              imgClassName="p-2"
+              fit="contain"
             />
           </div>
 
@@ -219,14 +239,14 @@ const ItemDetails = () => {
       </div>
 
       {/* Claim Modal */}
-      <Modal isOpen={claimModal} onClose={() => setClaimModal(false)} title="Submit a Claim">
+      <Modal isOpen={claimModal} onClose={() => { setClaimModal(false); setClaimMsg(''); setClaimError(''); }} title="Submit a Claim">
         <div className="mb-4 p-3 bg-blue-50 rounded-lg">
           <p className="text-sm text-blue-700">
-            <strong>Important:</strong> Please describe why you believe this is your item. Include identifying details (color, brand, contents, etc.) to help the reporter verify your claim.
+            <strong>Important:</strong> Please describe why you believe this is your item. Include identifying details (colour, brand, contents, etc.) to help the reporter verify your claim.
           </p>
         </div>
         <div className="form-group">
-          <label htmlFor="claim-msg" className="form-label">Your Message</label>
+          <label htmlFor="claim-msg" className="form-label">Your Message <span className="text-red-500">*</span></label>
           <textarea
             id="claim-msg"
             rows={5}
@@ -234,12 +254,13 @@ const ItemDetails = () => {
             value={claimMsg}
             onChange={e => { setClaimMsg(e.target.value); setClaimError(''); }}
             className={`input-field resize-none ${claimError ? 'input-error' : ''}`}
+            maxLength={500}
           />
           {claimError && <p className="form-error">{claimError}</p>}
           <p className="form-hint">{claimMsg.length}/500 characters</p>
         </div>
         <div className="flex gap-3">
-          <button onClick={() => setClaimModal(false)} className="btn-secondary flex-1" disabled={claimLoading}>Cancel</button>
+          <button onClick={() => { setClaimModal(false); setClaimMsg(''); setClaimError(''); }} className="btn-secondary flex-1" disabled={claimLoading}>Cancel</button>
           <button onClick={handleClaim} className="btn-primary flex-1" disabled={claimLoading}>
             {claimLoading ? <><Loader className="w-4 h-4 animate-spin" /> Submitting...</> : 'Submit Claim'}
           </button>

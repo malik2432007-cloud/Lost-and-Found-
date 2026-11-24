@@ -1,17 +1,28 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Edit2, Trash2, Eye, FileText, AlertCircle, Package, CheckCircle, Clock } from 'lucide-react';
+import { Edit2, Trash2, Eye, FileText, AlertCircle, Package, CheckCircle, Clock, Archive, ChevronDown } from 'lucide-react';
 import { getUserItems, updateItem, deleteItem } from '../firebase/firestoreService';
+import { uploadItemImage } from '../firebase/storageService';
 import { useAuth } from '../context/AuthContext';
 import StatusBadge from '../components/StatusBadge';
 import ConfirmDialog from '../components/ConfirmDialog';
 import EmptyState from '../components/EmptyState';
 import LoadingSpinner from '../components/LoadingSpinner';
 import Modal from '../components/Modal';
+import ImageUpload from '../components/ImageUpload';
+import ItemImage from '../components/ItemImage';
 import { formatDate, formatRelativeTime } from '../utils/formatters';
-import { CATEGORIES, LOCATIONS, ITEM_STATUSES } from '../utils/constants';
+import { CATEGORIES, LOCATIONS } from '../utils/constants';
 import { validateItemForm } from '../utils/validators';
 import toast from 'react-hot-toast';
+
+// ✅ All available statuses a reporter can set
+const STATUS_OPTIONS = [
+  { value: 'active', label: 'Active', desc: 'Still searching / available' },
+  { value: 'claimed', label: 'Claimed', desc: 'Ownership verified' },
+  { value: 'returned', label: 'Returned', desc: 'Item returned to owner' },
+  { value: 'closed', label: 'Closed', desc: 'Report closed' },
+];
 
 const TABS = [
   { key: 'all', label: 'All' },
@@ -20,9 +31,8 @@ const TABS = [
   { key: 'active', label: 'Active' },
   { key: 'claimed', label: 'Claimed' },
   { key: 'returned', label: 'Returned' },
+  { key: 'closed', label: 'Closed' },
 ];
-
-const STATUS_OPTIONS = ['active', 'claimed', 'returned'];
 
 const MyReports = () => {
   const { currentUser } = useAuth();
@@ -34,10 +44,14 @@ const MyReports = () => {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const [editImageFile, setEditImageFile] = useState(null);
+  const [editImageUrl, setEditImageUrl] = useState('');
   const [editErrors, setEditErrors] = useState({});
   const [editLoading, setEditLoading] = useState(false);
+  const [statusChanging, setStatusChanging] = useState(null);
 
   const load = async () => {
+    if (!currentUser) return;
     setLoading(true);
     try {
       const data = await getUserItems(currentUser.uid);
@@ -62,7 +76,7 @@ const MyReports = () => {
     try {
       await deleteItem(deleteTarget.id);
       setItems(prev => prev.filter(i => i.id !== deleteTarget.id));
-      toast.success('Report deleted.');
+      toast.success('Report deleted successfully.');
       setDeleteTarget(null);
     } catch {
       toast.error('Failed to delete report.');
@@ -74,27 +88,62 @@ const MyReports = () => {
   const openEdit = (item) => {
     setEditItem(item);
     setEditForm({
-      title: item.title, category: item.category, description: item.description,
-      location: item.location, date: item.date, brand: item.brand || '',
-      color: item.color || '', additionalInfo: item.additionalInfo || '',
-      status: item.status,
+      title: item.title || '',
+      category: item.category || '',
+      description: item.description || '',
+      location: item.location || '',
+      date: item.date || '',
+      brand: item.brand || '',
+      color: item.color || '',
+      additionalInfo: item.additionalInfo || '',
+      status: item.status || 'active',
     });
+    setEditImageUrl(item.imageUrl || '');
+    setEditImageFile(null);
     setEditErrors({});
   };
 
   const handleEditSave = async () => {
-    const errors = validateItemForm(editForm);
+    const isLocationRequired = false;
+    const errors = validateItemForm(editForm, isLocationRequired);
     if (Object.keys(errors).length > 0) { setEditErrors(errors); return; }
     setEditLoading(true);
     try {
-      await updateItem(editItem.id, editForm);
-      setItems(prev => prev.map(i => i.id === editItem.id ? { ...i, ...editForm } : i));
-      toast.success('Report updated!');
+      let finalImageUrl = editImageUrl;
+      if (editImageFile) {
+        finalImageUrl = await uploadItemImage(editImageFile, editItem.id);
+      }
+
+      const updateData = {
+        ...editForm,
+        imageUrl: finalImageUrl || '',
+      };
+
+      await updateItem(editItem.id, updateData);
+      setItems(prev => prev.map(i => i.id === editItem.id ? { ...i, ...updateData } : i));
+      toast.success('Report updated successfully!');
       setEditItem(null);
-    } catch {
+    } catch (err) {
+      console.error('Edit save error:', err);
       toast.error('Failed to update report.');
     } finally {
       setEditLoading(false);
+    }
+  };
+
+  // ✅ FIX: Quick status change from the table without opening the full edit modal
+  const handleQuickStatusChange = async (item, newStatus) => {
+    if (item.status === newStatus) return;
+    setStatusChanging(item.id);
+    try {
+      await updateItem(item.id, { status: newStatus });
+      setItems(prev => prev.map(i => i.id === item.id ? { ...i, status: newStatus } : i));
+      toast.success(`Status updated to "${newStatus}"`);
+    } catch (err) {
+      console.error('Status change error:', err);
+      toast.error('Failed to update status.');
+    } finally {
+      setStatusChanging(null);
     }
   };
 
@@ -163,12 +212,14 @@ const MyReports = () => {
                   <tr key={item.id} className="hover:bg-gray-50 transition-colors">
                     <td className="table-cell">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0">
-                          {item.imageUrl ? (
-                            <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
-                          ) : (
-                            <Package className="w-5 h-5 text-gray-400 m-auto mt-2.5" />
-                          )}
+                        <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 border border-gray-100 shadow-xs">
+                          <ItemImage
+                            src={item.imageUrl || item.image}
+                            alt={item.title}
+                            className="w-full h-full"
+                            fit="cover"
+                            showSpinner={false}
+                          />
                         </div>
                         <div>
                           <p className="font-medium text-gray-900 text-sm">{item.title}</p>
@@ -177,7 +228,23 @@ const MyReports = () => {
                       </div>
                     </td>
                     <td className="table-cell"><StatusBadge status={item.type} /></td>
-                    <td className="table-cell"><StatusBadge status={item.status} /></td>
+                    <td className="table-cell">
+                      {/* ✅ FIX: Inline status dropdown for quick status changes */}
+                      <div className="relative">
+                        <select
+                          value={item.status}
+                          onChange={e => handleQuickStatusChange(item, e.target.value)}
+                          disabled={statusChanging === item.id}
+                          className="text-xs pl-2 pr-6 py-1 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer appearance-none disabled:opacity-50"
+                          title="Change status"
+                        >
+                          {STATUS_OPTIONS.map(s => (
+                            <option key={s.value} value={s.value}>{s.label}</option>
+                          ))}
+                        </select>
+                        <ChevronDown className="absolute right-1.5 top-1.5 w-3 h-3 text-gray-400 pointer-events-none" />
+                      </div>
+                    </td>
                     <td className="table-cell text-xs">{item.location}</td>
                     <td className="table-cell text-xs">{formatDate(item.date)}</td>
                     <td className="table-cell">
@@ -189,15 +256,13 @@ const MyReports = () => {
                         >
                           <Eye className="w-4 h-4" />
                         </Link>
-                        {item.status === 'active' && (
-                          <button
-                            onClick={() => openEdit(item)}
-                            className="p-1.5 text-gray-400 hover:text-yellow-600 hover:bg-yellow-50 rounded"
-                            title="Edit"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                        )}
+                        <button
+                          onClick={() => openEdit(item)}
+                          className="p-1.5 text-gray-400 hover:text-yellow-600 hover:bg-yellow-50 rounded"
+                          title="Edit"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() => setDeleteTarget(item)}
                           className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
@@ -238,6 +303,7 @@ const MyReports = () => {
                   value={editForm.title}
                   onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))}
                   className={`input-field ${editErrors.title ? 'input-error' : ''}`}
+                  placeholder="Item name"
                 />
                 {editErrors.title && <p className="form-error">{editErrors.title}</p>}
               </div>
@@ -248,8 +314,10 @@ const MyReports = () => {
                   onChange={e => setEditForm(f => ({ ...f, category: e.target.value }))}
                   className={`input-field ${editErrors.category ? 'input-error' : ''}`}
                 >
+                  <option value="">Select category</option>
                   {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
+                {editErrors.category && <p className="form-error">{editErrors.category}</p>}
               </div>
             </div>
             <div>
@@ -259,17 +327,19 @@ const MyReports = () => {
                 value={editForm.description}
                 onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
                 className={`input-field resize-none ${editErrors.description ? 'input-error' : ''}`}
+                placeholder="Describe the item..."
               />
               {editErrors.description && <p className="form-error">{editErrors.description}</p>}
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="form-label">Location <span className="text-red-500">*</span></label>
+                <label className="form-label">Location (optional)</label>
                 <select
-                  value={editForm.location}
+                  value={editForm.location || ''}
                   onChange={e => setEditForm(f => ({ ...f, location: e.target.value }))}
-                  className={`input-field ${editErrors.location ? 'input-error' : ''}`}
+                  className="input-field"
                 >
+                  <option value="">Select location (optional)</option>
                   {LOCATIONS.map(l => <option key={l} value={l}>{l}</option>)}
                 </select>
               </div>
@@ -281,25 +351,49 @@ const MyReports = () => {
                   onChange={e => setEditForm(f => ({ ...f, date: e.target.value }))}
                   className={`input-field ${editErrors.date ? 'input-error' : ''}`}
                 />
+                {editErrors.date && <p className="form-error">{editErrors.date}</p>}
               </div>
             </div>
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="form-label">Brand</label>
-                <input type="text" value={editForm.brand} onChange={e => setEditForm(f => ({ ...f, brand: e.target.value }))} className="input-field" />
+                <input type="text" value={editForm.brand} onChange={e => setEditForm(f => ({ ...f, brand: e.target.value }))} className="input-field" placeholder="e.g. Samsung" />
               </div>
               <div>
                 <label className="form-label">Color</label>
-                <input type="text" value={editForm.color} onChange={e => setEditForm(f => ({ ...f, color: e.target.value }))} className="input-field" />
+                <input type="text" value={editForm.color} onChange={e => setEditForm(f => ({ ...f, color: e.target.value }))} className="input-field" placeholder="e.g. Black" />
               </div>
               <div>
                 <label className="form-label">Status</label>
                 <select value={editForm.status} onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))} className="input-field">
-                  {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+                  {STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </select>
               </div>
             </div>
-            <div className="flex justify-end gap-3 pt-2">
+            <div>
+              <label className="form-label">Item Photo</label>
+              <ImageUpload
+                currentUrl={editImageUrl}
+                onFileSelect={(file) => {
+                  setEditImageFile(file);
+                }}
+                onClear={() => {
+                  setEditImageFile(null);
+                  setEditImageUrl('');
+                }}
+              />
+            </div>
+            <div>
+              <label className="form-label">Additional Details</label>
+              <textarea
+                rows={2}
+                value={editForm.additionalInfo}
+                onChange={e => setEditForm(f => ({ ...f, additionalInfo: e.target.value }))}
+                className="input-field resize-none"
+                placeholder="Any other helpful details..."
+              />
+            </div>
+            <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
               <button onClick={() => setEditItem(null)} className="btn-secondary" disabled={editLoading}>Cancel</button>
               <button onClick={handleEditSave} className="btn-primary" disabled={editLoading}>
                 {editLoading ? 'Saving...' : 'Save Changes'}

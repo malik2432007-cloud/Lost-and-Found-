@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Bell, X, CheckCheck } from 'lucide-react';
+import { Bell, X, CheckCheck, ExternalLink } from 'lucide-react';
 import { useNotifications } from '../hooks/useNotifications';
 import { formatRelativeTime } from '../utils/formatters';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 const NOTIF_COLORS = {
   claim: 'bg-yellow-100 text-yellow-700',
@@ -14,6 +14,16 @@ const NOTIF_COLORS = {
 const NotificationBell = () => {
   const { notifications, unreadCount, markRead, markAllRead } = useNotifications();
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
+
+  const handleNotifClick = (notif) => {
+    if (!notif.read) markRead(notif.id);
+    const target = notif.itemId || notif.reportId;
+    if (target) {
+      setOpen(false);
+      navigate(`/item/${target}`);
+    }
+  };
 
   return (
     <div className="relative">
@@ -24,7 +34,7 @@ const NotificationBell = () => {
       >
         <Bell className="w-5 h-5" />
         {unreadCount > 0 && (
-          <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+          <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
@@ -34,8 +44,15 @@ const NotificationBell = () => {
         <>
           <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
           <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-gray-100 z-40 overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-              <h3 className="font-semibold text-sm text-gray-900">Notifications</h3>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50">
+              <h3 className="font-semibold text-sm text-gray-900">
+                Notifications
+                {unreadCount > 0 && (
+                  <span className="ml-2 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                    {unreadCount}
+                  </span>
+                )}
+              </h3>
               <div className="flex items-center gap-2">
                 {unreadCount > 0 && (
                   <button
@@ -53,39 +70,52 @@ const NotificationBell = () => {
 
             <div className="max-h-80 overflow-y-auto scrollbar-thin">
               {notifications.length === 0 ? (
-                <div className="py-10 text-center text-sm text-gray-400">
-                  No notifications yet
+                <div className="py-10 text-center">
+                  <Bell className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+                  <p className="text-sm text-gray-400">No notifications yet</p>
+                  <p className="text-xs text-gray-300 mt-1">You'll be notified when someone claims your item</p>
                 </div>
               ) : (
-                notifications.map((notif) => (
+                notifications.slice(0, 10).map((notif) => (
                   <div
                     key={notif.id}
-                    onClick={() => markRead(notif.id)}
+                    onClick={() => handleNotifClick(notif)}
                     className={`px-4 py-3 border-b border-gray-50 cursor-pointer hover:bg-gray-50 transition-colors ${
                       !notif.read ? 'bg-blue-50/40' : ''
                     }`}
                   >
-                    <div className="flex items-start gap-2">
-                      <span className={`mt-0.5 px-2 py-0.5 rounded text-[10px] font-semibold ${NOTIF_COLORS[notif.type] || NOTIF_COLORS.info}`}>
+                    <div className="flex items-start gap-2 mb-1">
+                      <span className={`flex-shrink-0 px-2 py-0.5 rounded text-[10px] font-semibold ${NOTIF_COLORS[notif.type] || NOTIF_COLORS.info}`}>
                         {notif.type?.toUpperCase() || 'INFO'}
                       </span>
                       {!notif.read && <span className="mt-1.5 flex-shrink-0 w-2 h-2 rounded-full bg-blue-500" />}
+                      <span className="text-[10px] text-gray-400 ml-auto">{formatRelativeTime(notif.createdAt)}</span>
                     </div>
-                    <p className="text-xs font-medium text-gray-800 mt-1">{notif.title}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{notif.message}</p>
-                    <p className="text-[10px] text-gray-400 mt-1">{formatRelativeTime(notif.createdAt)}</p>
+                    <p className="text-xs font-semibold text-gray-800">{notif.title}</p>
+                    <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{notif.message}</p>
+                    {/* ✅ FIX: Link to related item */}
+                    {notif.itemId && (
+                      <Link
+                        to={`/item/${notif.itemId}`}
+                        onClick={e => { e.stopPropagation(); setOpen(false); }}
+                        className="inline-flex items-center gap-1 mt-1.5 text-[10px] font-medium text-blue-600 hover:underline"
+                      >
+                        <ExternalLink className="w-2.5 h-2.5" />
+                        View Item
+                      </Link>
+                    )}
                   </div>
                 ))
               )}
             </div>
 
-            <div className="px-4 py-3 border-t border-gray-100">
+            <div className="px-4 py-3 border-t border-gray-100 bg-gray-50">
               <Link
                 to="/notifications"
                 onClick={() => setOpen(false)}
-                className="text-xs text-blue-600 hover:underline"
+                className="text-xs text-blue-600 hover:underline font-medium"
               >
-                View all notifications
+                View all notifications →
               </Link>
             </div>
           </div>

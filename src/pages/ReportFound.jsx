@@ -1,21 +1,39 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, MapPin, Calendar, FileText, Loader, Image } from 'lucide-react';
+import { Package, Calendar, FileText, Loader, Image } from 'lucide-react';
 import { createItem } from '../firebase/firestoreService';
 import { uploadItemImage } from '../firebase/storageService';
 import { useAuth } from '../context/AuthContext';
-import { CATEGORIES, LOCATIONS } from '../utils/constants';
+import { CATEGORIES } from '../utils/constants';
 import { validateItemForm } from '../utils/validators';
 import ImageUpload from '../components/ImageUpload';
 import toast from 'react-hot-toast';
 
+// Field component defined outside parent to avoid re-rendering and input resets
+const Field = ({ id, label, required = true, hint, error, children }) => (
+  <div className="form-group">
+    <label htmlFor={id} className="form-label">
+      {label} {required && <span className="text-red-500">*</span>}
+      {!required && <span className="text-gray-400 font-normal"> (optional)</span>}
+    </label>
+    {children}
+    {hint && <p className="form-hint">{hint}</p>}
+    {error && <p className="form-error">{error}</p>}
+  </div>
+);
+
 const ReportFound = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, userProfile } = useAuth();
   const navigate = useNavigate();
 
   const [form, setForm] = useState({
-    title: '', category: '', description: '', location: '',
-    date: '', brand: '', color: '', additionalInfo: '',
+    title: '',
+    category: '',
+    description: '',
+    date: '',
+    brand: '',
+    color: '',
+    additionalInfo: '',
   });
   const [imageFile, setImageFile] = useState(null);
   const [errors, setErrors] = useState({});
@@ -24,42 +42,66 @@ const ReportFound = () => {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm(f => ({ ...f, [name]: value }));
-    if (errors[name]) setErrors(e => ({ ...e, [name]: '' }));
+    if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const validationErrors = validateItemForm(form);
+    if (loading) return; // Prevent duplicate submissions
+
+    // Validate form without requiring location for found items
+    const validationErrors = validateItemForm(form, false);
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
       toast.error('Please fix the errors before submitting.');
       return;
     }
+
+    if (!currentUser?.uid) {
+      toast.error('You must be logged in to submit a report.');
+      return;
+    }
+
     setLoading(true);
     try {
-      const itemData = {
-        ...form,
-        title: form.title.trim(),
-        description: form.description.trim(),
-        userId: currentUser.uid,
-        type: 'found',
-        imageUrl: '',
-      };
-      const itemId = await createItem(itemData);
-
+      // 1. Upload image first if one was selected
+      let uploadedImageUrl = '';
       if (imageFile) {
         try {
-          const url = await uploadItemImage(imageFile, itemId);
-          await import('../firebase/firestoreService').then(m => m.updateItem(itemId, { imageUrl: url }));
-        } catch {
-          // Image upload optional — item still saved
+          uploadedImageUrl = await uploadItemImage(
+            imageFile,
+            `found_${Date.now()}_${currentUser.uid.slice(0, 6)}`
+          );
+        } catch (imgErr) {
+          console.error('Image upload failed:', imgErr);
         }
       }
 
+      // 2. Create the Firestore item document atomically with imageUrl included
+      const itemData = {
+        title: form.title.trim(),
+        category: form.category,
+        description: form.description.trim(),
+        date: form.date,
+        location: 'Not specified', // Location Found removed per requirement
+        brand: form.brand?.trim() || '',
+        color: form.color?.trim() || '',
+        additionalInfo: form.additionalInfo?.trim() || '',
+        userId: currentUser.uid,
+        userEmail: currentUser.email || '',
+        userName: userProfile?.name || 'Community Member',
+        type: 'found',
+        status: 'active',
+        imageUrl: uploadedImageUrl || '',
+      };
+
+      const itemId = await createItem(itemData);
+
       toast.success('Found item reported successfully!');
       navigate(`/item/${itemId}`);
-    } catch {
-      toast.error('Failed to submit report. Please try again.');
+    } catch (err) {
+      console.error('Submit report error:', err);
+      toast.error(`Failed to submit report: ${err?.message || 'Please try again.'}`);
     } finally {
       setLoading(false);
     }
@@ -67,23 +109,11 @@ const ReportFound = () => {
 
   const today = new Date().toISOString().split('T')[0];
 
-  const Field = ({ id, label, required = true, hint, children }) => (
-    <div className="form-group">
-      <label htmlFor={id} className="form-label">
-        {label} {required && <span className="text-red-500">*</span>}
-        {!required && <span className="text-gray-400 font-normal"> (optional)</span>}
-      </label>
-      {children}
-      {hint && <p className="form-hint">{hint}</p>}
-      {errors[id] && <p className="form-error">{errors[id]}</p>}
-    </div>
-  );
-
   return (
     <div>
       <div className="page-header">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center flex-shrink-0">
             <Package className="w-5 h-5 text-green-600" />
           </div>
           <div>
@@ -101,53 +131,74 @@ const ReportFound = () => {
                 <FileText className="w-4 h-4 text-blue-600" /> Item Information
               </h2>
 
-              <Field id="title" label="Item Name" hint="Describe it clearly, e.g. 'Blue Backpack with name tag'">
+              <Field id="title" label="Item Name" hint="Describe it clearly, e.g. 'Blue Backpack with name tag'" error={errors.title}>
                 <input
-                  id="title" name="title" type="text"
+                  id="title"
+                  name="title"
+                  type="text"
                   placeholder="e.g. Blue Jansport Backpack"
-                  value={form.title} onChange={handleChange}
+                  value={form.title}
+                  onChange={handleChange}
                   className={`input-field ${errors.title ? 'input-error' : ''}`}
                   maxLength={100}
+                  autoComplete="off"
+                  disabled={loading}
                 />
               </Field>
 
-              <Field id="category" label="Category">
+              <Field id="category" label="Category" error={errors.category}>
                 <select
-                  id="category" name="category"
-                  value={form.category} onChange={handleChange}
+                  id="category"
+                  name="category"
+                  value={form.category}
+                  onChange={handleChange}
                   className={`input-field ${errors.category ? 'input-error' : ''}`}
+                  disabled={loading}
                 >
                   <option value="">Select a category</option>
                   {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </Field>
 
-              <Field id="description" label="Description" hint={`${form.description.length}/1000 — Describe what you found`}>
+              <Field id="description" label="Description" hint={`${form.description.length}/1000 — Describe what you found`} error={errors.description}>
                 <textarea
-                  id="description" name="description"
+                  id="description"
+                  name="description"
                   rows={4}
                   placeholder="Describe the item in detail. What did it look like? Any contents visible? What condition is it in?"
-                  value={form.description} onChange={handleChange}
+                  value={form.description}
+                  onChange={handleChange}
                   className={`input-field resize-none ${errors.description ? 'input-error' : ''}`}
                   maxLength={1000}
+                  disabled={loading}
                 />
               </Field>
 
-              <div className="grid grid-cols-2 gap-4">
-                <Field id="brand" label="Brand" required={false}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field id="brand" label="Brand" required={false} error={errors.brand}>
                   <input
-                    id="brand" name="brand" type="text"
-                    placeholder="e.g. Apple, Adidas"
-                    value={form.brand} onChange={handleChange}
+                    id="brand"
+                    name="brand"
+                    type="text"
+                    placeholder="e.g. Apple, Adidas, Casio"
+                    value={form.brand}
+                    onChange={handleChange}
                     className="input-field"
+                    autoComplete="off"
+                    disabled={loading}
                   />
                 </Field>
-                <Field id="color" label="Color" required={false}>
+                <Field id="color" label="Color" required={false} error={errors.color}>
                   <input
-                    id="color" name="color" type="text"
-                    placeholder="e.g. Red, Silver"
-                    value={form.color} onChange={handleChange}
+                    id="color"
+                    name="color"
+                    type="text"
+                    placeholder="e.g. Red, Silver, Black"
+                    value={form.color}
+                    onChange={handleChange}
                     className="input-field"
+                    autoComplete="off"
+                    disabled={loading}
                   />
                 </Field>
               </div>
@@ -155,28 +206,20 @@ const ReportFound = () => {
 
             <div className="section-card">
               <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-blue-600" /> Where & When Found
+                <Calendar className="w-4 h-4 text-blue-600" /> When Found
               </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Field id="location" label="Location Found">
-                  <select
-                    id="location" name="location"
-                    value={form.location} onChange={handleChange}
-                    className={`input-field ${errors.location ? 'input-error' : ''}`}
-                  >
-                    <option value="">Select location</option>
-                    {LOCATIONS.map(l => <option key={l} value={l}>{l}</option>)}
-                  </select>
-                </Field>
-                <Field id="date" label="Date Found">
-                  <input
-                    id="date" name="date" type="date"
-                    max={today}
-                    value={form.date} onChange={handleChange}
-                    className={`input-field ${errors.date ? 'input-error' : ''}`}
-                  />
-                </Field>
-              </div>
+              <Field id="date" label="Date Found" error={errors.date}>
+                <input
+                  id="date"
+                  name="date"
+                  type="date"
+                  max={today}
+                  value={form.date}
+                  onChange={handleChange}
+                  className={`input-field ${errors.date ? 'input-error' : ''}`}
+                  disabled={loading}
+                />
+              </Field>
             </div>
 
             <div className="section-card">
@@ -187,7 +230,9 @@ const ReportFound = () => {
             </div>
 
             <div className="section-card">
-              <h2 className="font-semibold text-gray-900 mb-4">Additional Details <span className="text-gray-400 font-normal text-sm">(optional)</span></h2>
+              <h2 className="font-semibold text-gray-900 mb-4">
+                Additional Details <span className="text-gray-400 font-normal text-sm">(optional)</span>
+              </h2>
               <textarea
                 name="additionalInfo"
                 rows={3}
@@ -196,15 +241,32 @@ const ReportFound = () => {
                 onChange={handleChange}
                 className="input-field resize-none"
                 maxLength={500}
+                disabled={loading}
               />
             </div>
 
             <div className="flex gap-3">
-              <button type="button" onClick={() => navigate(-1)} className="btn-secondary flex-1" disabled={loading}>
+              <button
+                type="button"
+                onClick={() => navigate(-1)}
+                className="btn-secondary flex-1"
+                disabled={loading}
+              >
                 Cancel
               </button>
-              <button type="submit" className="btn-primary flex-1" style={{ background: '#16a34a' }} disabled={loading}>
-                {loading ? <><Loader className="w-4 h-4 animate-spin" /> Submitting...</> : 'Submit Found Report'}
+              <button
+                type="submit"
+                className="btn-primary flex-1"
+                style={{ background: '#16a34a' }}
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <Loader className="w-4 h-4 animate-spin" /> Submitting...
+                  </>
+                ) : (
+                  'Submit Found Report'
+                )}
               </button>
             </div>
           </form>
@@ -215,15 +277,15 @@ const ReportFound = () => {
             <h3 className="font-semibold text-gray-900 mb-3">🤝 Good Samaritan Guide</h3>
             <ul className="space-y-2.5 text-sm text-gray-600">
               {[
-                'Only include details that help identify the owner — avoid revealing too much so that only the real owner can claim it.',
+                'Only include details that help identify the owner — avoid revealing unique contents so that only the real owner can describe them.',
                 'Keep the item in a safe place until the owner is identified.',
-                "If it's urgent (ID card, medicines), contact campus admin directly.",
-                'Your identity is protected — claimants contact you through our system.',
-                'You can update the status once the item is returned.',
+                "If it's urgent (ID card, keys, medicines), inform campus security or administration.",
+                'Your contact info is protected — claimants contact you through our verification system.',
+                'You can update the status to "Returned" once the item is back with its owner.',
               ].map((tip, i) => (
                 <li key={i} className="flex items-start gap-2">
                   <span className="text-green-500 font-bold flex-shrink-0">{i + 1}.</span>
-                  {tip}
+                  <span>{tip}</span>
                 </li>
               ))}
             </ul>
