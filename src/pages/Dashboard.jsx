@@ -4,13 +4,12 @@ import {
   FileText, TrendingUp, AlertCircle, Package, ArrowRight
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { getUserItems, getRecentItems } from '../firebase/firestoreService';
+import { getRecentItems } from '../firebase/firestoreService';
 import ItemCard from '../components/ItemCard';
 import LoadingSpinner from '../components/LoadingSpinner';
 
 const Dashboard = () => {
   const { userProfile, currentUser } = useAuth();
-  const [userReports, setUserReports] = useState([]);
   const [recentItems, setRecentItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -18,18 +17,10 @@ const Dashboard = () => {
     if (!currentUser) return;
     setLoading(true);
     try {
-      const [myReports, latestAllItems] = await Promise.all([
-        getUserItems(currentUser.uid).catch(err => {
-          console.error('Error fetching user items for dashboard:', err);
-          return [];
-        }),
-        getRecentItems(6).catch(err => {
-          console.error('Error fetching recent items for dashboard:', err);
-          return [];
-        }),
-      ]);
-
-      setUserReports(myReports);
+      const latestAllItems = await getRecentItems(6).catch(err => {
+        console.error('Error fetching recent items for dashboard:', err);
+        return [];
+      });
       setRecentItems(latestAllItems);
     } catch (e) {
       console.error('Dashboard load error:', e);
@@ -59,35 +50,8 @@ const Dashboard = () => {
           Welcome back, {userProfile?.name?.split(' ')[0] || 'User'} 👋
         </h1>
         <p className="page-subtitle text-sm text-gray-500 mt-1">
-          Here is a summary of your activity and recent campus reports
+          Quickly report items, search campus belongings, or browse recent updates
         </p>
-      </div>
-
-      {/* ─── SUMMARY SECTION: MY REPORTS ───────────────────────────────── */}
-      <div className="card p-6 bg-gradient-to-br from-blue-50 to-indigo-50/50 border-blue-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-5">
-          <div className="w-14 h-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-md flex-shrink-0">
-            <FileText className="w-7 h-7" />
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-0.5">
-              Summary of Your Activity
-            </p>
-            <div className="flex items-baseline gap-2">
-              <h2 className="text-3xl font-extrabold text-gray-900">{userReports.length}</h2>
-              <span className="text-sm font-semibold text-gray-700">My Reports</span>
-            </div>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Total reports submitted by your account
-            </p>
-          </div>
-        </div>
-        <Link
-          to="/my-reports"
-          className="btn-secondary text-xs flex items-center justify-center gap-1.5 self-start sm:self-auto"
-        >
-          View in My Reports <ArrowRight className="w-3.5 h-3.5" />
-        </Link>
       </div>
 
       {/* Quick Actions */}
