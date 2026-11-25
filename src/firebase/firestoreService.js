@@ -74,6 +74,14 @@ export const setUserRole = async (uid, role) => {
   await updateDoc(doc(db, 'users', uid), { role, updatedAt: serverTimestamp() });
 };
 
+export const blockUser = async (uid) => {
+  await updateDoc(doc(db, 'users', uid), { blocked: true, blockedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+};
+
+export const unblockUser = async (uid) => {
+  await updateDoc(doc(db, 'users', uid), { blocked: false, blockedAt: null, updatedAt: serverTimestamp() });
+};
+
 // ─── ITEMS ───────────────────────────────────────────────────────────────────
 export const createItem = async (data) => {
   const ref = await addDoc(collection(db, 'items'), {

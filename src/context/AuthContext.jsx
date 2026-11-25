@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from '../firebase/config';
 import { getUserProfile } from '../firebase/firestoreService';
 
@@ -12,15 +12,25 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setCurrentUser(user);
       if (user) {
         try {
           const profile = await getUserProfile(user.uid);
+          // If the user's account is marked as blocked, force sign out immediately
+          if (profile?.blocked === true) {
+            await signOut(auth);
+            setCurrentUser(null);
+            setUserProfile(null);
+            setLoading(false);
+            return;
+          }
+          setCurrentUser(user);
           setUserProfile(profile);
         } catch (e) {
+          setCurrentUser(user);
           setUserProfile(null);
         }
       } else {
+        setCurrentUser(null);
         setUserProfile(null);
       }
       setLoading(false);

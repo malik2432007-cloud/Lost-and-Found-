@@ -30,6 +30,7 @@ import Profile        from './pages/Profile';
 // Admin pages
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminUsers     from './pages/admin/AdminUsers';
+import AdminItems     from './pages/admin/AdminItems';
 
 const App = () => {
   console.log('✅ App component rendered');
@@ -65,7 +66,7 @@ const App = () => {
           <Route path="/admin"           element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="/admin/users"     element={<AdminUsers />} />
-          <Route path="/admin/items"     element={<AdminDashboard />} />
+          <Route path="/admin/items"     element={<AdminItems />} />
           <Route path="/admin/claims"    element={<AdminDashboard />} />
         </Route>
       </Route>

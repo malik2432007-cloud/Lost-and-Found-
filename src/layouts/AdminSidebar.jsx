@@ -1,11 +1,10 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, Package, ClipboardList, Shield } from 'lucide-react';
+import { LayoutDashboard, Users, Package, Shield } from 'lucide-react';
 
 const ADMIN_NAV = [
   { to: '/admin', icon: LayoutDashboard, label: 'Overview', end: true },
   { to: '/admin/users', icon: Users, label: 'Users' },
   { to: '/admin/items', icon: Package, label: 'Items' },
-  { to: '/admin/claims', icon: ClipboardList, label: 'Claims' },
 ];
 
 const AdminSidebar = () => (

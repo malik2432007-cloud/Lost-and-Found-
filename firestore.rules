@@ -18,6 +18,11 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == 'admin';
     }
 
+    function isNotBlocked() {
+      return !exists(/databases/$(database)/documents/users/$(request.auth.uid)) ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('blocked', false) != true;
+    }
+
     // ─── Users collection ─────────────────────────────────────────────────────
     match /users/{userId} {
       // Any signed-in user can read user profiles (needed for name lookups)
@@ -26,15 +31,17 @@ service cloud.firestore {
       // A user can only create their own profile document
       allow create: if isOwner(userId)
         && request.resource.data.role == 'user'    // Cannot self-assign admin
+        && request.resource.data.get('blocked', false) == false
         && request.resource.data.uid == userId;    // UID must match doc ID
 
-      // A user can update their own profile; they cannot change their own role
+      // A user can update their own profile; they cannot change their own role or unblock themselves
       allow update: if (
           isOwner(userId)
-          && (!request.resource.data.keys().hasAny(['role'])
-              || request.resource.data.role == resource.data.role)  // role unchanged
+          && isNotBlocked()
+          && (!request.resource.data.keys().hasAny(['role', 'blocked'])
+              || (request.resource.data.role == resource.data.role && request.resource.data.get('blocked', false) == resource.data.get('blocked', false)))
         )
-        || isAdmin();  // Admin can update any profile including role
+        || isAdmin();  // Admin can update any profile including role and blocked status
 
       // Only admin can delete profiles
       allow delete: if isAdmin();
@@ -45,13 +52,15 @@ service cloud.firestore {
       // Anyone (including unauthenticated) can read items — public browse
       allow read: if true;
 
-      // Only authenticated users can create items
+      // Only authenticated, non-blocked users can create items
       allow create: if isSignedIn()
+        && isNotBlocked()
         && request.resource.data.userId == request.auth.uid;
 
       // Owner or admin can update; owner cannot change userId (ownership)
       allow update: if (
           isSignedIn()
+          && isNotBlocked()
           && (resource.data.userId == request.auth.uid || resource.data.get('ownerId', '') == request.auth.uid)
           && (!request.resource.data.keys().hasAny(['userId'])
               || request.resource.data.userId == resource.data.userId)
@@ -71,8 +80,9 @@ service cloud.firestore {
         isAdmin()
       );
 
-      // Any authenticated user can create a claim for someone else's item
+      // Any authenticated, non-blocked user can create a claim for someone else's item
       allow create: if isSignedIn()
+        && isNotBlocked()
         && request.resource.data.claimantId == request.auth.uid
         && request.resource.data.ownerId != request.auth.uid;  // Cannot claim own item
 
