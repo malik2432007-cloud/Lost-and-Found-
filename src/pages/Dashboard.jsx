@@ -1,16 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  FileText, TrendingUp, AlertCircle, Package, ArrowRight,
-  Clock, CheckCheck, Archive
+  FileText, TrendingUp, AlertCircle, Package, ArrowRight
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getUserItems, getRecentItems } from '../firebase/firestoreService';
 import ItemCard from '../components/ItemCard';
-import ItemImage from '../components/ItemImage';
-import StatusBadge from '../components/StatusBadge';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { formatDate } from '../utils/formatters';
 
 const Dashboard = () => {
   const { userProfile, currentUser } = useAuth();
@@ -22,7 +18,6 @@ const Dashboard = () => {
     if (!currentUser) return;
     setLoading(true);
     try {
-      // Fetch user's personal reports and global recent reports independently
       const [myReports, latestAllItems] = await Promise.all([
         getUserItems(currentUser.uid).catch(err => {
           console.error('Error fetching user items for dashboard:', err);
@@ -46,10 +41,6 @@ const Dashboard = () => {
   useEffect(() => {
     loadData();
   }, [loadData]);
-
-  // Separate active vs previous (claimed, returned, closed) reports
-  const currentReports = userReports.filter(r => r.status === 'active');
-  const previousReports = userReports.filter(r => r.status !== 'active');
 
   const QUICK_ACTIONS = [
     { to: '/report/lost', label: 'Report Lost Item', icon: AlertCircle, color: 'btn-danger', desc: 'Lost something on campus? File a report.' },
@@ -97,134 +88,6 @@ const Dashboard = () => {
         >
           View in My Reports <ArrowRight className="w-3.5 h-3.5" />
         </Link>
-      </div>
-
-      {/* ─── CURRENT REPORTS (Active reports with thumbnails) ─────────────── */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-              <Clock className="w-5 h-5 text-blue-600" /> Current Reports
-            </h2>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Your currently active lost and found reports
-            </p>
-          </div>
-          <Link
-            to="/my-reports"
-            className="text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
-          >
-            Manage in My Reports ({currentReports.length}) <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
-        </div>
-
-        {currentReports.length === 0 ? (
-          <div className="card p-6 text-center border-dashed border-gray-200">
-            <Clock className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-            <p className="text-sm font-medium text-gray-700">No active reports right now</p>
-            <p className="text-xs text-gray-400 mt-1 mb-4">
-              You do not have any active reports. Report an item if you lost or found something.
-            </p>
-            <div className="flex justify-center gap-3">
-              <Link to="/report/lost" className="btn-danger text-xs">
-                Report Lost Item
-              </Link>
-              <Link to="/report/found" className="btn-primary text-xs" style={{ background: '#16a34a' }}>
-                Report Found Item
-              </Link>
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {currentReports.map(item => (
-              <div key={item.id} className="card p-4 flex gap-4 items-center hover:shadow-md transition-shadow">
-                <div className="w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 border border-gray-100 shadow-xs">
-                  <ItemImage
-                    src={item.imageUrl || item.image}
-                    alt={item.title}
-                    className="w-full h-full"
-                    fit="cover"
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-sm text-gray-900 truncate">{item.title}</h3>
-                  <p className="text-xs text-gray-400 mt-0.5">{item.category} • {formatDate(item.date)}</p>
-                  <div className="flex items-center gap-2 mt-2">
-                    <StatusBadge status={item.type} />
-                    <StatusBadge status={item.status} />
-                  </div>
-                </div>
-                <Link
-                  to={`/item/${item.id}`}
-                  className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg flex-shrink-0"
-                  title="View Details"
-                >
-                  <ArrowRight className="w-4 h-4" />
-                </Link>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* ─── PREVIOUS REPORTS (Claimed, returned, closed reports) ─────────── */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-              <CheckCheck className="w-5 h-5 text-green-600" /> Previous Reports
-            </h2>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Your resolved, claimed, returned, and closed reports
-            </p>
-          </div>
-          <Link
-            to="/my-reports"
-            className="text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
-          >
-            View All ({previousReports.length}) <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
-        </div>
-
-        {previousReports.length === 0 ? (
-          <div className="card p-6 text-center border-dashed border-gray-200">
-            <Archive className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-            <p className="text-sm font-medium text-gray-700">No previous resolved reports</p>
-            <p className="text-xs text-gray-400 mt-1">
-              When an item you reported is claimed, returned, or closed, it will appear here.
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {previousReports.map(item => (
-              <div key={item.id} className="card p-4 flex gap-4 items-center hover:shadow-md transition-shadow">
-                <div className="w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 border border-gray-100 shadow-xs">
-                  <ItemImage
-                    src={item.imageUrl || item.image}
-                    alt={item.title}
-                    className="w-full h-full"
-                    fit="cover"
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-sm text-gray-900 truncate">{item.title}</h3>
-                  <p className="text-xs text-gray-400 mt-0.5">Reported: {formatDate(item.date)}</p>
-                  <div className="flex items-center gap-2 mt-2">
-                    <StatusBadge status={item.status} />
-                    <span className="text-[11px] text-gray-500 uppercase font-medium">{item.type}</span>
-                  </div>
-                </div>
-                <Link
-                  to={`/item/${item.id}`}
-                  className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg flex-shrink-0"
-                  title="View Details"
-                >
-                  <ArrowRight className="w-4 h-4" />
-                </Link>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Quick Actions */}

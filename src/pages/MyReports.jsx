@@ -12,7 +12,7 @@ import Modal from '../components/Modal';
 import ImageUpload from '../components/ImageUpload';
 import ItemImage from '../components/ItemImage';
 import { formatDate, formatRelativeTime } from '../utils/formatters';
-import { CATEGORIES, LOCATIONS } from '../utils/constants';
+import { CATEGORIES } from '../utils/constants';
 import { validateItemForm } from '../utils/validators';
 import toast from 'react-hot-toast';
 
@@ -245,7 +245,7 @@ const MyReports = () => {
                         <ChevronDown className="absolute right-1.5 top-1.5 w-3 h-3 text-gray-400 pointer-events-none" />
                       </div>
                     </td>
-                    <td className="table-cell text-xs">{item.location}</td>
+                    <td className="table-cell text-xs">{item.location && item.location !== 'Not specified' ? item.location : 'Location not provided'}</td>
                     <td className="table-cell text-xs">{formatDate(item.date)}</td>
                     <td className="table-cell">
                       <div className="flex items-center gap-1">
@@ -333,15 +333,14 @@ const MyReports = () => {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="form-label">Location (optional)</label>
-                <select
+                <label className="form-label">Location</label>
+                <input
+                  type="text"
+                  placeholder="e.g. College Library, Room 204, Lucknow"
                   value={editForm.location || ''}
                   onChange={e => setEditForm(f => ({ ...f, location: e.target.value }))}
                   className="input-field"
-                >
-                  <option value="">Select location (optional)</option>
-                  {LOCATIONS.map(l => <option key={l} value={l}>{l}</option>)}
-                </select>
+                />
               </div>
               <div>
                 <label className="form-label">Date <span className="text-red-500">*</span></label>

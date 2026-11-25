@@ -65,10 +65,9 @@ const AdminDashboard = () => {
       {/* Quick Actions */}
       <div className="section-card">
         <h2 className="font-semibold text-gray-900 mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Link to="/admin/users" className="btn-secondary text-sm"><Users className="w-4 h-4" /> Manage Users</Link>
           <Link to="/admin/items" className="btn-secondary text-sm"><Package className="w-4 h-4" /> Manage Items</Link>
-          <Link to="/admin/claims" className="btn-secondary text-sm"><ClipboardList className="w-4 h-4" /> View Claims</Link>
           <Link to="/search" className="btn-primary text-sm"><TrendingUp className="w-4 h-4" /> Browse All</Link>
         </div>
       </div>

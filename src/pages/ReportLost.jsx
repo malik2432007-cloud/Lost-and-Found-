@@ -31,6 +31,7 @@ const ReportLost = () => {
     category: '',
     description: '',
     date: '',
+    location: '',
     brand: '',
     color: '',
     additionalInfo: '',
@@ -49,8 +50,8 @@ const ReportLost = () => {
     e.preventDefault();
     if (loading) return; // Prevent duplicate submissions
 
-    // Validate form without requiring location for lost items
-    const validationErrors = validateItemForm(form, false);
+    // Validate form with required location
+    const validationErrors = validateItemForm(form, true);
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
       toast.error('Please fix the errors before submitting.');
@@ -77,7 +78,7 @@ const ReportLost = () => {
         }
       }
 
-      // 2. Create the Firestore item document atomically with imageUrl included
+      // 2. Create the Firestore item document atomically with location and imageUrl included
       const itemData = {
         title: form.title.trim(),
         category: form.category,
@@ -85,7 +86,7 @@ const ReportLost = () => {
         brand: form.brand?.trim() || '',
         color: form.color?.trim() || '',
         date: form.date,
-        location: 'Not specified', // Location Lost removed per requirement
+        location: form.location.trim(),
         additionalInfo: form.additionalInfo?.trim() || '',
         userId: currentUser.uid,
         userEmail: currentUser.email || '',
@@ -206,12 +207,12 @@ const ReportLost = () => {
               </div>
             </div>
 
-            {/* When Lost (Location Lost removed per requirement) */}
+            {/* When & Where Lost */}
             <div className="section-card">
               <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-blue-600" /> When Lost
+                <Calendar className="w-4 h-4 text-blue-600" /> When & Where Lost
               </h2>
-              <div>
+              <div className="space-y-4">
                 <Field id="date" label="Date Lost" error={errors.date} hint="Select the date you lost the item">
                   <input
                     id="date"
@@ -222,6 +223,20 @@ const ReportLost = () => {
                     onChange={handleChange}
                     className={`input-field ${errors.date ? 'input-error' : ''}`}
                     disabled={loading}
+                  />
+                </Field>
+
+                <Field id="location" label="Where was it lost?" error={errors.location}>
+                  <input
+                    id="location"
+                    name="location"
+                    type="text"
+                    placeholder="Enter the location where you lost the item (e.g. College Library, Room 204, Lucknow)"
+                    value={form.location}
+                    onChange={handleChange}
+                    className={`input-field ${errors.location ? 'input-error' : ''}`}
+                    disabled={loading}
+                    autoComplete="off"
                   />
                 </Field>
               </div>
@@ -293,7 +308,8 @@ const ReportLost = () => {
                 'Be as specific as possible in the description.',
                 'Include any unique identifiers (serial numbers, inscriptions, stickers).',
                 'Add a photo if you have one — it dramatically increases recovery chances.',
-                'Check back regularly to see if someone has submitted a claim or match.',
+                'Provide the exact location where you believe it was lost.',
+                'Check back regularly to see if someone has submitted a claim.',
                 'Your contact info is never shown publicly for privacy.',
               ].map((tip, i) => (
                 <li key={i} className="flex items-start gap-2">

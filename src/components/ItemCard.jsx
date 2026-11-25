@@ -29,12 +29,10 @@ const ItemCard = ({ item }) => {
           {description && (
             <p className="text-xs text-gray-500 mb-3 line-clamp-2 leading-relaxed">{truncateText(description, 90)}</p>
           )}
-          {location && location !== 'Not specified' && (
-            <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
-              <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
-              <span className="truncate">{location}</span>
-            </div>
-          )}
+          <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
+            <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
+            <span className="truncate">{location && location !== 'Not specified' ? location : 'Location not provided'}</span>
+          </div>
           <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-4">
             <Calendar className="w-3.5 h-3.5 flex-shrink-0" />
             <span>{formatDate(date)}</span>

@@ -244,7 +244,7 @@ const AdminItems = () => {
 
                     {/* Location */}
                     <td className="table-cell text-xs text-gray-600 max-w-[140px] truncate">
-                      {item.location}
+                      {item.location && item.location !== 'Not specified' ? item.location : 'Location not provided'}
                     </td>
 
                     {/* Date */}

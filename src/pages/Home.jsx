@@ -8,7 +8,7 @@ import { useAuth } from '../context/AuthContext';
 const FEATURES = [
   { icon: PlusCircle, title: 'Report Lost Items', description: 'Quickly report your lost belongings with photos, location, and details to help others identify them.', color: 'bg-red-100 text-red-600' },
   { icon: Search, title: 'Search & Filter', description: 'Search through all reports by category, location, date, and keywords to find matching items.', color: 'bg-blue-100 text-blue-600' },
-  { icon: Bell, title: 'Smart Notifications', description: 'Get notified when someone claims your item or when a potential match is found.', color: 'bg-yellow-100 text-yellow-600' },
+  { icon: Bell, title: 'Smart Notifications', description: 'Get notified when someone claims your item or updates your report status.', color: 'bg-yellow-100 text-yellow-600' },
   { icon: Shield, title: 'Secure & Private', description: 'Your personal contact information is never exposed. Claim items through our safe messaging system.', color: 'bg-green-100 text-green-600' },
   { icon: CheckCircle, title: 'Claim System', description: 'Submit a claim with proof of ownership. Reporters review and approve genuine claims.', color: 'bg-purple-100 text-purple-600' },
   { icon: Users, title: 'Admin Oversight', description: 'Dedicated admins moderate all reports to keep the platform authentic and trustworthy.', color: 'bg-indigo-100 text-indigo-600' },

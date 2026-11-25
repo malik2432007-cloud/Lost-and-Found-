@@ -6,10 +6,7 @@ import {
 } from 'lucide-react';
 import { getItem, createClaim, getItemClaims, createNotification } from '../firebase/firestoreService';
 import { useAuth } from '../context/AuthContext';
-import { findPotentialMatches } from '../services/matchingService';
-import { getAllItems } from '../firebase/firestoreService';
 import StatusBadge from '../components/StatusBadge';
-import ItemCard from '../components/ItemCard';
 import ItemImage from '../components/ItemImage';
 import Modal from '../components/Modal';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -17,9 +14,7 @@ import { formatDate, formatRelativeTime } from '../utils/formatters';
 import { validateClaimForm } from '../utils/validators';
 import toast from 'react-hot-toast';
 
-const PLACEHOLDER = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22800%22 height=%22500%22 viewBox=%220 0 800 500%22%3E%3Crect width=%22800%22 height=%22500%22 fill=%22%23f3f4f6%22/%3E%3Ctext x=%22400%22 y=%22260%22 font-family=%22sans-serif%22 font-size=%2224%22 fill=%22%239ca3af%22 text-anchor=%22middle%22%3ENo Image Available%3C/text%3E%3C/svg%3E';
-
-// ✅ FIX: DetailRow defined outside component to prevent remounting
+// DetailRow defined outside component to prevent remounting
 const DetailRow = ({ icon: Icon, label, value }) => (
   value ? (
     <div className="flex items-start gap-3 py-3 border-b border-gray-50 last:border-0">
@@ -39,7 +34,6 @@ const ItemDetails = () => {
 
   const [item, setItem] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [matches, setMatches] = useState([]);
   const [existingClaim, setExistingClaim] = useState(null);
   const [claimModal, setClaimModal] = useState(false);
   const [claimMsg, setClaimMsg] = useState('');
@@ -53,14 +47,8 @@ const ItemDetails = () => {
         if (!data) { navigate('/not-found'); return; }
         setItem(data);
 
-        const [allItems, claims] = await Promise.all([
-          getAllItems(),
-          currentUser ? getItemClaims(id) : Promise.resolve([]),
-        ]);
-
-        setMatches(findPotentialMatches(data, allItems));
-
         if (currentUser) {
+          const claims = await getItemClaims(id);
           const mine = claims.find(c => c.claimantId === currentUser.uid);
           setExistingClaim(mine || null);
         }
@@ -93,8 +81,7 @@ const ItemDetails = () => {
         message: claimMsg.trim(),
       });
 
-      // ✅ Notify the item owner with itemId & itemTitle for linking
-      // Guard: don't notify yourself
+      // Notify the item owner with itemId & itemTitle for linking
       if (ownerId && ownerId !== currentUser.uid) {
         await createNotification(ownerId, {
           title: 'New Claim on Your Item',
@@ -151,7 +138,11 @@ const ItemDetails = () => {
               <StatusBadge status={item.type} />
               <StatusBadge status={item.status} />
             </div>
-            <DetailRow icon={MapPin} label="Location" value={item.location} />
+            <DetailRow
+              icon={MapPin}
+              label="Location"
+              value={item.location && item.location !== 'Not specified' ? item.location : 'Location not provided'}
+            />
             <DetailRow icon={Calendar} label="Date" value={formatDate(item.date)} />
             <DetailRow icon={Tag} label="Category" value={item.category} />
             <DetailRow icon={Package} label="Brand" value={item.brand} />
@@ -216,25 +207,6 @@ const ItemDetails = () => {
               </p>
             </div>
           </div>
-
-          {/* Potential Matches */}
-          {matches.length > 0 && (
-            <div className="card p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <AlertCircle className="w-5 h-5 text-yellow-500" />
-                <h2 className="font-semibold text-gray-900">Potential Matches</h2>
-                <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">
-                  Rule-based suggestions
-                </span>
-              </div>
-              <p className="text-xs text-gray-400 mb-4">
-                These items may be related based on category, location, and date. Not guaranteed matches.
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {matches.map(m => <ItemCard key={m.id} item={m} />)}
-              </div>
-            </div>
-          )}
         </div>
       </div>
 

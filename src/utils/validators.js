@@ -23,16 +23,16 @@ export const validateRegisterForm = ({ name, email, password, confirmPassword })
 /**
  * Validate item form data.
  * @param {Object} data Form values
- * @param {boolean} isLocationRequired Set to true only if location is strictly required
+ * @param {boolean} isLocationRequired Set to true when location is required
  */
-export const validateItemForm = (data, isLocationRequired = false) => {
+export const validateItemForm = (data, isLocationRequired = true) => {
   const errors = {};
   if (!data.title || data.title.trim().length < 2) errors.title = 'Item name must be at least 2 characters.';
   if (!data.category) errors.category = 'Please select a category.';
   if (!data.description || data.description.trim().length < 10) errors.description = 'Description must be at least 10 characters.';
   if (data.description && data.description.length > MAX_DESCRIPTION_LENGTH) errors.description = `Description cannot exceed ${MAX_DESCRIPTION_LENGTH} characters.`;
   if (isLocationRequired && (!data.location || !data.location.trim())) {
-    errors.location = 'Please select a location.';
+    errors.location = 'Please enter the location.';
   }
   if (!data.date) errors.date = 'Please provide the date.';
   const today = new Date();

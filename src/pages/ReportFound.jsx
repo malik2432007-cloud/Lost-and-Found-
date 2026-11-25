@@ -31,6 +31,7 @@ const ReportFound = () => {
     category: '',
     description: '',
     date: '',
+    location: '',
     brand: '',
     color: '',
     additionalInfo: '',
@@ -49,8 +50,8 @@ const ReportFound = () => {
     e.preventDefault();
     if (loading) return; // Prevent duplicate submissions
 
-    // Validate form without requiring location for found items
-    const validationErrors = validateItemForm(form, false);
+    // Validate form with required location
+    const validationErrors = validateItemForm(form, true);
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
       toast.error('Please fix the errors before submitting.');
@@ -77,13 +78,13 @@ const ReportFound = () => {
         }
       }
 
-      // 2. Create the Firestore item document atomically with imageUrl included
+      // 2. Create the Firestore item document atomically with location and imageUrl included
       const itemData = {
         title: form.title.trim(),
         category: form.category,
         description: form.description.trim(),
         date: form.date,
-        location: 'Not specified', // Location Found removed per requirement
+        location: form.location.trim(),
         brand: form.brand?.trim() || '',
         color: form.color?.trim() || '',
         additionalInfo: form.additionalInfo?.trim() || '',
@@ -204,22 +205,39 @@ const ReportFound = () => {
               </div>
             </div>
 
+            {/* When and Where Was It Found? */}
             <div className="section-card">
               <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-blue-600" /> When Found
+                <Calendar className="w-4 h-4 text-blue-600" /> When and Where Was It Found?
               </h2>
-              <Field id="date" label="Date Found" error={errors.date}>
-                <input
-                  id="date"
-                  name="date"
-                  type="date"
-                  max={today}
-                  value={form.date}
-                  onChange={handleChange}
-                  className={`input-field ${errors.date ? 'input-error' : ''}`}
-                  disabled={loading}
-                />
-              </Field>
+              <div className="space-y-4">
+                <Field id="date" label="When was it found?" error={errors.date}>
+                  <input
+                    id="date"
+                    name="date"
+                    type="date"
+                    max={today}
+                    value={form.date}
+                    onChange={handleChange}
+                    className={`input-field ${errors.date ? 'input-error' : ''}`}
+                    disabled={loading}
+                  />
+                </Field>
+
+                <Field id="location" label="Where was it found?" error={errors.location}>
+                  <input
+                    id="location"
+                    name="location"
+                    type="text"
+                    placeholder="Enter the location where you found the item (e.g. College Canteen, Main Gate, Lucknow)"
+                    value={form.location}
+                    onChange={handleChange}
+                    className={`input-field ${errors.location ? 'input-error' : ''}`}
+                    disabled={loading}
+                    autoComplete="off"
+                  />
+                </Field>
+              </div>
             </div>
 
             <div className="section-card">
@@ -280,6 +298,7 @@ const ReportFound = () => {
                 'Only include details that help identify the owner — avoid revealing unique contents so that only the real owner can describe them.',
                 'Keep the item in a safe place until the owner is identified.',
                 "If it's urgent (ID card, keys, medicines), inform campus security or administration.",
+                'Provide the specific location where you picked up or noticed the item.',
                 'Your contact info is protected — claimants contact you through our verification system.',
                 'You can update the status to "Returned" once the item is back with its owner.',
               ].map((tip, i) => (
